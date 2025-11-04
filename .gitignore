@@ -1,0 +1,102 @@
+# Python 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Python 分发/打包
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 敏感配置文件（重要！）
+.env
+.env.local
+.env.*.local
+credentials.json
+token.pickle
+*.pem
+*.key
+
+# 状态文件
+reminded_events.json
+
+# 备份文件
+*.bak
+*.backup
+*.tmp
+*~
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# 日志文件
+*.log
+logs/
+pip-log.txt
+
+# 测试相关
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+.hypothesis/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 压缩文件（如果包含敏感信息）
+# *.zip
+# *.tar.gz
+
+# 项目特定的忽略文件
+# 如果有本地测试文件可以取消注释
+# test_local.py
+# config_local.py

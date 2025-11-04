@@ -1,0 +1,27 @@
+[Unit]
+Description=Google Calendar Reminder Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/calendar-reminder
+EnvironmentFile=/opt/calendar-reminder/.env
+ExecStart=/usr/bin/python3 /opt/calendar-reminder/main_cli.py --headless
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/calendar-reminder.log
+StandardError=append:/var/log/calendar-reminder.error.log
+
+# 环境变量
+Environment="PYTHONUNBUFFERED=1"
+
+# 健康检查和资源限制
+# 如果进程10秒内没有响应，发送 SIGKILL
+TimeoutStopSec=30
+# 限制内存使用（可选）
+MemoryLimit=500M
+
+[Install]
+WantedBy=multi-user.target
