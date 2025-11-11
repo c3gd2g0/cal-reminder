@@ -37,12 +37,37 @@ class GoogleCalendarClient:
             with open('token.pickle', 'rb') as token:
                 creds = pickle.load(token)
 
+        # 检查凭证是否需要刷新（提前5分钟刷新）
+        needs_refresh = False
+        if creds:
+            if creds.expired:
+                needs_refresh = True
+            elif creds.expiry:
+                # 提前5分钟刷新
+                time_until_expiry = creds.expiry - datetime.now(timezone.utc)
+                if time_until_expiry.total_seconds() < 300:  # 5分钟 = 300秒
+                    needs_refresh = True
+
         # 如果没有有效的凭证，让用户登录
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                print('刷新访问令牌...')
-                creds.refresh(Request())
-            else:
+        if not creds or not creds.valid or needs_refresh:
+            if creds and creds.refresh_token and (creds.expired or needs_refresh):
+                try:
+                    print('刷新访问令牌...')
+                    creds.refresh(Request())
+                    # 保存刷新后的凭证
+                    with open('token.pickle', 'wb') as token:
+                        pickle.dump(creds, token)
+                    print('访问令牌刷新成功')
+                except Exception as e:
+                    print(f'刷新令牌失败: {e}')
+                    print('需要重新授权...')
+                    # 删除无效的 token 文件
+                    if os.path.exists('token.pickle'):
+                        os.remove('token.pickle')
+                    creds = None
+            
+            # 如果刷新失败或没有有效凭证，执行完整的授权流程
+            if not creds or not creds.valid:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.credentials_path, SCOPES)
 
