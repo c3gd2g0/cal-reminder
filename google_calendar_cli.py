@@ -44,7 +44,13 @@ class GoogleCalendarClient:
                 needs_refresh = True
             elif creds.expiry:
                 # 提前5分钟刷新
-                time_until_expiry = creds.expiry - datetime.now(timezone.utc)
+                # 确保 expiry 是 timezone-aware 的
+                if creds.expiry.tzinfo is None:
+                    # 如果 expiry 是 naive datetime，假设它是 UTC 时间
+                    expiry_aware = creds.expiry.replace(tzinfo=timezone.utc)
+                else:
+                    expiry_aware = creds.expiry
+                time_until_expiry = expiry_aware - datetime.now(timezone.utc)
                 if time_until_expiry.total_seconds() < 300:  # 5分钟 = 300秒
                     needs_refresh = True
 
