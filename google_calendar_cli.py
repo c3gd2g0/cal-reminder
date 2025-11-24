@@ -160,8 +160,79 @@ class GoogleCalendarClient:
             return events
 
         except HttpError as error:
-            print(f'获取日历事件时发生错误: {error}')
-            return []
+            # 检查是否是认证错误（401 Unauthorized）
+            if error.resp.status == 401:
+                print(f'检测到认证错误，尝试重新刷新 token...')
+                try:
+                    # 重新认证
+                    self._authenticate()
+                    print('Token 刷新成功，重试 API 调用...')
+
+                    # 重试一次 API 调用
+                    events_result = self.service.events().list(
+                        calendarId='primary',
+                        timeMin=time_min_str,
+                        timeMax=time_max_str,
+                        maxResults=max_results,
+                        singleEvents=True,
+                        orderBy='startTime'
+                    ).execute()
+
+                    events = events_result.get('items', [])
+                    return events
+                except Exception as retry_error:
+                    print(f'重新认证后仍然失败: {retry_error}')
+                    raise  # 抛出异常让上层处理
+            else:
+                print(f'获取日历事件时发生错误: {error}')
+                raise  # 抛出异常让上层处理
+        except Exception as error:
+            # 捕获其他异常（如 invalid_grant）
+            error_str = str(error)
+            if 'invalid_grant' in error_str or 'Token has been expired or revoked' in error_str:
+                print(f'检测到 token 过期错误: {error}')
+                print(f'尝试刷新 token...')
+                try:
+                    # 先尝试刷新，不删除 token 文件
+                    # 让 _authenticate() 方法处理刷新逻辑
+                    self._authenticate()
+                    print('Token 刷新成功，重试 API 调用...')
+
+                    # 重新构建时间字符串（因为在 except 块中可能无法访问之前的变量）
+                    if time_min is None:
+                        time_min = datetime.now(timezone.utc)
+                    if time_max is None:
+                        time_max = time_min + timedelta(hours=24)
+
+                    if time_min.tzinfo is not None:
+                        time_min_str = time_min.isoformat()
+                    else:
+                        time_min_str = time_min.isoformat() + 'Z'
+
+                    if time_max.tzinfo is not None:
+                        time_max_str = time_max.isoformat()
+                    else:
+                        time_max_str = time_max.isoformat() + 'Z'
+
+                    # 重试一次 API 调用
+                    events_result = self.service.events().list(
+                        calendarId='primary',
+                        timeMin=time_min_str,
+                        timeMax=time_max_str,
+                        maxResults=max_results,
+                        singleEvents=True,
+                        orderBy='startTime'
+                    ).execute()
+
+                    events = events_result.get('items', [])
+                    return events
+                except Exception as retry_error:
+                    print(f'重新认证后仍然失败: {retry_error}')
+                    print(f'可能需要手动重新授权。请删除 token.pickle 并重启服务。')
+                    raise  # 抛出异常让上层处理
+            else:
+                print(f'获取日历事件时发生错误: {error}')
+                raise  # 抛出异常让上层处理
 
     def get_event_start_time(self, event):
         """
