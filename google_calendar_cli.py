@@ -26,6 +26,7 @@ class GoogleCalendarClient:
         self.credentials_path = credentials_path
         self.headless = headless
         self.service = None
+        self.creds = None  # 保存凭证对象以便后续检查和刷新
         self._authenticate()
 
     def _authenticate(self):
@@ -114,7 +115,64 @@ class GoogleCalendarClient:
                 pickle.dump(creds, token)
                 print('凭证已保存到 token.pickle')
 
+        self.creds = creds  # 保存到实例变量
         self.service = build('calendar', 'v3', credentials=creds)
+
+    def _ensure_valid_token(self):
+        """
+        确保 token 有效，如果即将过期则提前刷新
+        在每次 API 调用前应该调用此方法
+        """
+        if not self.creds:
+            # 如果没有凭证，重新认证
+            self._authenticate()
+            return
+
+        # 检查凭证是否需要刷新（提前5分钟刷新）
+        needs_refresh = False
+
+        if self.creds.expired:
+            needs_refresh = True
+        elif self.creds.expiry:
+            # 提前5分钟刷新
+            # 确保 expiry 是 timezone-aware 的
+            if self.creds.expiry.tzinfo is None:
+                # 如果 expiry 是 naive datetime，假设它是 UTC 时间
+                expiry_aware = self.creds.expiry.replace(tzinfo=timezone.utc)
+            else:
+                expiry_aware = self.creds.expiry
+
+            time_until_expiry = expiry_aware - datetime.now(timezone.utc)
+            if time_until_expiry.total_seconds() < 300:  # 5分钟 = 300秒
+                needs_refresh = True
+
+        # 如果需要刷新
+        if needs_refresh:
+            if self.creds.refresh_token:
+                try:
+                    print('Token 即将过期，提前刷新...')
+                    self.creds.refresh(Request())
+                    # 保存刷新后的凭证
+                    with open('token.pickle', 'wb') as token:
+                        pickle.dump(self.creds, token)
+                    print('Token 刷新成功')
+                    # 重新构建 service 对象
+                    self.service = build('calendar', 'v3', credentials=self.creds)
+                except Exception as e:
+                    print(f'Token 刷新失败: {e}')
+                    print('需要重新授权...')
+                    # 删除无效的 token 文件
+                    if os.path.exists('token.pickle'):
+                        os.remove('token.pickle')
+                    # 重新认证
+                    self._authenticate()
+            else:
+                print('没有 refresh_token，需要重新授权...')
+                # 删除无效的 token 文件
+                if os.path.exists('token.pickle'):
+                    os.remove('token.pickle')
+                # 重新认证
+                self._authenticate()
 
     def get_upcoming_events(self, time_min=None, time_max=None, max_results=10):
         """
@@ -128,6 +186,9 @@ class GoogleCalendarClient:
         Returns:
             事件列表
         """
+        # 在调用 API 前确保 token 有效
+        self._ensure_valid_token()
+
         try:
             if time_min is None:
                 time_min = datetime.now(timezone.utc)
@@ -160,13 +221,14 @@ class GoogleCalendarClient:
             return events
 
         except HttpError as error:
-            # 检查是否是认证错误（401 Unauthorized）
+            # 如果是认证错误，尝试重新刷新一次 token 后重试
             if error.resp.status == 401:
-                print(f'检测到认证错误，尝试重新刷新 token...')
+                print(f'检测到认证错误 (401)，尝试刷新 token 并重试...')
                 try:
-                    # 重新认证
+                    # 强制重新认证
+                    if os.path.exists('token.pickle'):
+                        os.remove('token.pickle')
                     self._authenticate()
-                    print('Token 刷新成功，重试 API 调用...')
 
                     # 重试一次 API 调用
                     events_result = self.service.events().list(
@@ -182,57 +244,10 @@ class GoogleCalendarClient:
                     return events
                 except Exception as retry_error:
                     print(f'重新认证后仍然失败: {retry_error}')
-                    raise  # 抛出异常让上层处理
+                    return []
             else:
                 print(f'获取日历事件时发生错误: {error}')
-                raise  # 抛出异常让上层处理
-        except Exception as error:
-            # 捕获其他异常（如 invalid_grant）
-            error_str = str(error)
-            if 'invalid_grant' in error_str or 'Token has been expired or revoked' in error_str:
-                print(f'检测到 token 过期错误: {error}')
-                print(f'尝试刷新 token...')
-                try:
-                    # 先尝试刷新，不删除 token 文件
-                    # 让 _authenticate() 方法处理刷新逻辑
-                    self._authenticate()
-                    print('Token 刷新成功，重试 API 调用...')
-
-                    # 重新构建时间字符串（因为在 except 块中可能无法访问之前的变量）
-                    if time_min is None:
-                        time_min = datetime.now(timezone.utc)
-                    if time_max is None:
-                        time_max = time_min + timedelta(hours=24)
-
-                    if time_min.tzinfo is not None:
-                        time_min_str = time_min.isoformat()
-                    else:
-                        time_min_str = time_min.isoformat() + 'Z'
-
-                    if time_max.tzinfo is not None:
-                        time_max_str = time_max.isoformat()
-                    else:
-                        time_max_str = time_max.isoformat() + 'Z'
-
-                    # 重试一次 API 调用
-                    events_result = self.service.events().list(
-                        calendarId='primary',
-                        timeMin=time_min_str,
-                        timeMax=time_max_str,
-                        maxResults=max_results,
-                        singleEvents=True,
-                        orderBy='startTime'
-                    ).execute()
-
-                    events = events_result.get('items', [])
-                    return events
-                except Exception as retry_error:
-                    print(f'重新认证后仍然失败: {retry_error}')
-                    print(f'可能需要手动重新授权。请删除 token.pickle 并重启服务。')
-                    raise  # 抛出异常让上层处理
-            else:
-                print(f'获取日历事件时发生错误: {error}')
-                raise  # 抛出异常让上层处理
+                return []
 
     def get_event_start_time(self, event):
         """

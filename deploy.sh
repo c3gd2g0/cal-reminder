@@ -75,6 +75,9 @@ check_pip() {
 create_install_dir() {
     print_info "创建安装目录: $INSTALL_DIR"
 
+    # 使用全局变量记录备份目录
+    BACKUP_DIR=""
+
     if [ -d "$INSTALL_DIR" ]; then
         print_warning "目录已存在，将备份现有文件..."
         BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
@@ -104,30 +107,42 @@ copy_files() {
         print_info "已复制 .env.example（配置参考）"
     fi
 
-    # 如果 .env 文件存在，复制它（但不要覆盖已存在的）
-    if [ -f "$SCRIPT_DIR/.env" ] && [ ! -f "$INSTALL_DIR/.env" ]; then
+    # 恢复或复制 .env 配置文件（优先从备份恢复）
+    if [ -n "$BACKUP_DIR" ] && [ -f "$BACKUP_DIR/.env" ]; then
+        cp "$BACKUP_DIR/.env" "$INSTALL_DIR/"
+        print_info "已从备份恢复 .env 文件"
+    elif [ -f "$SCRIPT_DIR/.env" ]; then
         cp "$SCRIPT_DIR/.env" "$INSTALL_DIR/"
         print_info "已复制 .env 文件"
-    elif [ ! -f "$INSTALL_DIR/.env" ]; then
+    else
         print_warning ".env 文件不存在，请基于 .env.example 创建并配置"
     fi
 
-    # 如果 credentials.json 存在，复制它
-    if [ -f "$SCRIPT_DIR/credentials.json" ]; then
+    # 恢复或复制 credentials.json（优先从备份恢复）
+    if [ -n "$BACKUP_DIR" ] && [ -f "$BACKUP_DIR/credentials.json" ]; then
+        cp "$BACKUP_DIR/credentials.json" "$INSTALL_DIR/"
+        print_info "已从备份恢复 credentials.json"
+    elif [ -f "$SCRIPT_DIR/credentials.json" ]; then
         cp "$SCRIPT_DIR/credentials.json" "$INSTALL_DIR/"
         print_info "已复制 credentials.json"
     else
         print_warning "credentials.json 不存在，请稍后手动配置"
     fi
 
-    # 如果 token.pickle 存在，复制它
-    if [ -f "$SCRIPT_DIR/token.pickle" ]; then
+    # 恢复或复制 token.pickle（优先从备份恢复）
+    if [ -n "$BACKUP_DIR" ] && [ -f "$BACKUP_DIR/token.pickle" ]; then
+        cp "$BACKUP_DIR/token.pickle" "$INSTALL_DIR/"
+        print_info "已从备份恢复 token.pickle (Google 认证令牌)"
+    elif [ -f "$SCRIPT_DIR/token.pickle" ]; then
         cp "$SCRIPT_DIR/token.pickle" "$INSTALL_DIR/"
         print_info "已复制 token.pickle (Google 认证令牌)"
     fi
 
-    # 如果 reminded_events.json 存在，复制它
-    if [ -f "$SCRIPT_DIR/reminded_events.json" ]; then
+    # 恢复或复制 reminded_events.json（优先从备份恢复）
+    if [ -n "$BACKUP_DIR" ] && [ -f "$BACKUP_DIR/reminded_events.json" ]; then
+        cp "$BACKUP_DIR/reminded_events.json" "$INSTALL_DIR/"
+        print_info "已从备份恢复 reminded_events.json (提醒记录)"
+    elif [ -f "$SCRIPT_DIR/reminded_events.json" ]; then
         cp "$SCRIPT_DIR/reminded_events.json" "$INSTALL_DIR/"
         print_info "已复制 reminded_events.json (提醒记录)"
     fi
